@@ -11,13 +11,15 @@ import (
 var _ scrapemate.HTTPFetcher = (*jsFetch)(nil)
 
 type JSFetcherOptions struct {
-	Headless          bool
-	DisableImages     bool
-	Rotator           scrapemate.ProxyRotator
-	PoolSize          int
-	PageReuseLimit    int
-	BrowserReuseLimit int
-	UserAgent         string
+	Headless            bool
+	DisableImages       bool
+	Rotator             scrapemate.ProxyRotator
+	PoolSize            int
+	PageReuseLimit      int
+	BrowserReuseLimit   int
+	UserAgent           string
+	BrowserArgs         []string
+	ReplaceDefaultArgs  bool
 }
 
 func New(params JSFetcherOptions) (scrapemate.HTTPFetcher, error) {
@@ -51,19 +53,21 @@ func New(params JSFetcherOptions) (scrapemate.HTTPFetcher, error) {
 	}
 
 	ans := jsFetch{
-		pw:                pw,
-		headless:          params.Headless,
-		disableImages:     params.DisableImages,
-		pool:              make(chan *browser, params.PoolSize),
-		rotator:           params.Rotator,
-		pageReuseLimit:    params.PageReuseLimit,
-		browserReuseLimit: params.BrowserReuseLimit,
-		ua:                params.UserAgent,
-		proxyPool:         pool,
+		pw:                 pw,
+		headless:           params.Headless,
+		disableImages:      params.DisableImages,
+		pool:               make(chan *browser, params.PoolSize),
+		rotator:            params.Rotator,
+		pageReuseLimit:     params.PageReuseLimit,
+		browserReuseLimit:  params.BrowserReuseLimit,
+		ua:                 params.UserAgent,
+		proxyPool:          pool,
+		browserArgs:        params.BrowserArgs,
+		replaceDefaultArgs: params.ReplaceDefaultArgs,
 	}
 
 	for range params.PoolSize {
-		b, err := newBrowser(pw, params.Headless, params.DisableImages, ans.proxyPool, params.UserAgent)
+		b, err := newBrowser(pw, params.Headless, params.DisableImages, ans.proxyPool, params.UserAgent, params.BrowserArgs, params.ReplaceDefaultArgs)
 		if err != nil {
 			_ = ans.Close()
 			return nil, err
@@ -76,15 +80,17 @@ func New(params JSFetcherOptions) (scrapemate.HTTPFetcher, error) {
 }
 
 type jsFetch struct {
-	pw                *playwright.Playwright
-	headless          bool
-	disableImages     bool
-	pool              chan *browser
-	rotator           scrapemate.ProxyRotator
-	pageReuseLimit    int
-	browserReuseLimit int
-	ua                string
-	proxyPool         *ProxyPool
+	pw                 *playwright.Playwright
+	headless           bool
+	disableImages      bool
+	pool               chan *browser
+	rotator            scrapemate.ProxyRotator
+	pageReuseLimit     int
+	browserReuseLimit  int
+	ua                 string
+	proxyPool          *ProxyPool
+	browserArgs        []string
+	replaceDefaultArgs bool
 }
 
 func (o *jsFetch) GetBrowser(ctx context.Context) (*browser, error) {
@@ -100,7 +106,7 @@ func (o *jsFetch) GetBrowser(ctx context.Context) (*browser, error) {
 	default:
 	}
 
-	return newBrowser(o.pw, o.headless, o.disableImages, o.proxyPool, o.ua)
+	return newBrowser(o.pw, o.headless, o.disableImages, o.proxyPool, o.ua, o.browserArgs, o.replaceDefaultArgs)
 }
 
 func (o *jsFetch) Close() error {
@@ -197,34 +203,53 @@ func (o *browser) Close() {
 	_ = o.browser.Close()
 }
 
-func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPool *ProxyPool, ua string) (*browser, error) {
+func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPool *ProxyPool, ua string, customArgs []string, replaceDefaultArgs bool) (*browser, error) {
+	// Default browser launch arguments
+	defaultArgs := []string{
+		`--start-maximized`,
+		`--no-default-browser-check`,
+		`--disable-dev-shm-usage`,
+		`--no-sandbox`,
+		`--disable-setuid-sandbox`,
+		`--no-zygote`,
+		`--disable-gpu`,
+		`--mute-audio`,
+		`--disable-extensions`,
+		// Note: --single-process removed - causes issues on Windows
+		`--disable-breakpad`,
+		`--disable-features=TranslateUI,BlinkGenPropertyTrees`,
+		`--disable-ipc-flooding-protection`,
+		`--enable-features=NetworkService,NetworkServiceInProcess`,
+		"--enable-features=NetworkService",
+		`--disable-default-apps`,
+		`--disable-notifications`,
+		`--disable-webgl`,
+		`--disable-blink-features=AutomationControlled`,
+		"--ignore-certificate-errors",
+		"--ignore-certificate-errors-spki-list",
+		"--disable-web-security",
+	}
+
+	var args []string
+	if replaceDefaultArgs {
+		// Use only custom args if replace is requested
+		args = make([]string, len(customArgs))
+		copy(args, customArgs)
+	} else {
+		// Start with default args
+		args = make([]string, len(defaultArgs))
+		copy(args, defaultArgs)
+		// Append custom args if provided
+		if len(customArgs) > 0 {
+			args = append(args, customArgs...)
+		}
+	}
+
 	opts := playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(headless),
-		Args: []string{
-			`--start-maximized`,
-			`--no-default-browser-check`,
-			`--disable-dev-shm-usage`,
-			`--no-sandbox`,
-			`--disable-setuid-sandbox`,
-			`--no-zygote`,
-			`--disable-gpu`,
-			`--mute-audio`,
-			`--disable-extensions`,
-			`--single-process`,
-			`--disable-breakpad`,
-			`--disable-features=TranslateUI,BlinkGenPropertyTrees`,
-			`--disable-ipc-flooding-protection`,
-			`--enable-features=NetworkService,NetworkServiceInProcess`,
-			"--enable-features=NetworkService",
-			`--disable-default-apps`,
-			`--disable-notifications`,
-			`--disable-webgl`,
-			`--disable-blink-features=AutomationControlled`,
-			"--ignore-certificate-errors",
-			"--ignore-certificate-errors-spki-list",
-			"--disable-web-security",
-		},
+		Args:     args,
 	}
+	
 	if disableImages {
 		opts.Args = append(opts.Args, `--blink-settings=imagesEnabled=false`)
 	}
