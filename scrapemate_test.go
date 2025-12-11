@@ -3,7 +3,7 @@ package scrapemate_test
 import (
 	"context"
 	"errors"
-	"syscall"
+	"os"
 	"testing"
 	"time"
 
@@ -325,7 +325,11 @@ func Test_Start(t *testing.T) {
 		case err = <-mateErr():
 			require.NoError(t, err)
 		case <-time.After(1 * time.Second):
-			err = syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+			// Send interrupt signal cross-platform
+			proc, err := os.FindProcess(os.Getpid())
+			if err == nil {
+				err = proc.Signal(os.Interrupt)
+			}
 			require.NoError(t, err)
 		}
 		require.NoError(t, mate.Err())
