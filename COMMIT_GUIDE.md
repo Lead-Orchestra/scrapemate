@@ -55,3 +55,11 @@ git commit -m "feat: Use local scrapemate fork with browser args support
 3. **Update go.mod** in google-maps-scraper if scrapemate version changes
 4. **Document any breaking changes** in scrapemate fork
 
+
+
+
+
+
+
+
+
