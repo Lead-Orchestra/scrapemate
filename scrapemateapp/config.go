@@ -140,22 +140,6 @@ func WithUA(ua string) func(*jsOptions) {
 	}
 }
 
-// WithBrowserArgs sets additional browser launch arguments.
-// These will be appended to default args unless used with ReplaceDefaultArgs().
-func WithBrowserArgs(args []string) func(*jsOptions) {
-	return func(o *jsOptions) {
-		o.BrowserArgs = args
-	}
-}
-
-// ReplaceDefaultArgs replaces all default browser args with the provided BrowserArgs.
-// Use this if you want full control over browser launch arguments.
-func ReplaceDefaultArgs() func(*jsOptions) {
-	return func(o *jsOptions) {
-		o.ReplaceDefaultArgs = true
-	}
-}
-
 // WithExitOnInactivity sets the duration after which the app will exit if there are no more jobs to run.
 func WithExitOnInactivity(duration time.Duration) func(*Config) error {
 	return func(o *Config) error {
@@ -171,12 +155,6 @@ type jsOptions struct {
 	Headfull      bool
 	DisableImages bool
 	UA            string
-	// BrowserArgs are additional browser launch arguments.
-	// These will be appended to the default args (or replace defaults if ReplaceDefaultArgs is true).
-	BrowserArgs []string
-	// ReplaceDefaultArgs if true, replaces all default browser args with BrowserArgs.
-	// If false (default), BrowserArgs are appended to default args.
-	ReplaceDefaultArgs bool
 }
 
 type Config struct {
