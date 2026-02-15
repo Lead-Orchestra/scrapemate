@@ -2,6 +2,7 @@ package jshttp
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/playwright-community/playwright-go"
 
@@ -198,9 +199,19 @@ func (o *browser) Close() {
 }
 
 func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPool *ProxyPool, ua string) (*browser, error) {
-	opts := playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(headless),
-		Args: []string{
+	// Some Chromium flags that are common in Linux container environments can crash Chromium on Windows.
+	// Keep the Windows arg set minimal and aligned with our working TS scrapers.
+	baseArgs := []string{
+		`--start-maximized`,
+		`--no-default-browser-check`,
+		`--disable-blink-features=AutomationControlled`,
+		`--disable-dev-shm-usage`,
+		`--no-sandbox`,
+	}
+
+	args := baseArgs
+	if runtime.GOOS != "windows" {
+		args = []string{
 			`--start-maximized`,
 			`--no-default-browser-check`,
 			`--disable-dev-shm-usage`,
@@ -215,15 +226,19 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
 			`--disable-features=TranslateUI,BlinkGenPropertyTrees`,
 			`--disable-ipc-flooding-protection`,
 			`--enable-features=NetworkService,NetworkServiceInProcess`,
-			"--enable-features=NetworkService",
 			`--disable-default-apps`,
 			`--disable-notifications`,
 			`--disable-webgl`,
 			`--disable-blink-features=AutomationControlled`,
-			"--ignore-certificate-errors",
-			"--ignore-certificate-errors-spki-list",
-			"--disable-web-security",
-		},
+			`--ignore-certificate-errors`,
+			`--ignore-certificate-errors-spki-list`,
+			`--disable-web-security`,
+		}
+	}
+
+	opts := playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(headless),
+		Args:     args,
 	}
 	if disableImages {
 		opts.Args = append(opts.Args, `--blink-settings=imagesEnabled=false`)
